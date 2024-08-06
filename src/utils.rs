@@ -5,13 +5,22 @@ pub fn distance_to_line<const N: usize>(
     b: Vector<f32, N>,
     x: Vector<f32, N>,
 ) -> f32 {
+    (x - project_line(a, b, x)).norm()
+}
+
+pub fn project_line<const N: usize>(
+    a: Vector<f32, N>,
+    b: Vector<f32, N>,
+    x: Vector<f32, N>,
+) -> Vector<f32, N> {
     let c = b - a;
     let l2 = c.norm_squared();
     let proj = (x - a).dot(&c) / l2;
     let proj = proj.clamp(0.0, 1.0);
-    let proj = a + proj * c;
-    (x - proj).norm()
+    a + proj * c
 }
+
+// Also, https://github.com/RenderKit/embree/blob/master/tutorials/common/math/closest_point.h
 
 pub fn foreach_grid_in_rect<const N: usize>(
     offset: Vector<f32, N>,

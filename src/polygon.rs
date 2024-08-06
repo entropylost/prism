@@ -1,39 +1,111 @@
 use super::*;
 
 #[derive(Debug, Clone)]
-pub struct PolygonArea {
-    polygons: Vec<Vec<Vector2<f32>>>,
-    min: Vector2<f32>,
-    max: Vector2<f32>,
+pub struct Cuboid<const N: usize> {
+    min: Vector<f32, N>,
+    max: Vector<f32, N>,
 }
-impl Default for PolygonArea {
+impl<const N: usize> Cuboid<N> {
+    pub fn new(min: Vector<f32, N>, max: Vector<f32, N>) -> Self {
+        Cuboid { min, max }
+    }
+}
+impl<const N: usize> Volume<N> for Cuboid<N> {
+    fn contains(&self, point: Vector<f32, N>) -> bool {
+        point.zip_fold(&self.min, true, |acc, a, b| acc && (a >= b))
+            && point.zip_fold(&self.max, true, |acc, a, b| acc && (a <= b))
+    }
+    fn min_bound(&self) -> Vector<f32, N> {
+        self.min
+    }
+    fn max_bound(&self) -> Vector<f32, N> {
+        self.max
+    }
+}
+impl<const N: usize> DistanceField<N> for Cuboid<N> {
+    fn distance(&self, point: Vector<f32, N>) -> f32 {
+        let inside = self.contains(point);
+        let nearest = point.zip_zip_map(&self.min, &self.max, |x, a, b| x.clamp(a, b));
+        if !inside {
+            return (point - nearest).norm();
+        }
+        let mut dist = f32::MAX;
+        for i in 0..N {
+            let mut nearest = nearest;
+            nearest[i] = self.min[i];
+            dist = dist.min((point - nearest).norm());
+            nearest[i] = self.max[i];
+            dist = dist.min((point - nearest).norm());
+        }
+        -dist
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Ball<const N: usize> {
+    center: Vector<f32, N>,
+    radius: f32,
+}
+impl<const N: usize> Ball<N> {
+    pub fn new(center: Vector<f32, N>, radius: f32) -> Self {
+        Ball { center, radius }
+    }
+}
+impl<const N: usize> Volume<N> for Ball<N> {
+    fn contains(&self, point: Vector<f32, N>) -> bool {
+        (point - self.center).norm_squared() <= self.radius * self.radius
+    }
+    fn min_bound(&self) -> Vector<f32, N> {
+        self.center - Vector::repeat(self.radius)
+    }
+    fn max_bound(&self) -> Vector<f32, N> {
+        self.center + Vector::repeat(self.radius)
+    }
+}
+impl<const N: usize> DistanceField<N> for Ball<N> {
+    fn distance(&self, point: Vector<f32, N>) -> f32 {
+        let dist = (point - self.center).norm();
+        dist - self.radius
+    }
+}
+
+// TODO: Make this work on 3D? Or only use triangles.
+#[derive(Debug, Clone)]
+pub struct Polygon<const N: usize> {
+    polygons: Vec<Vec<Vector<f32, N>>>,
+    min: Vector<f32, N>,
+    max: Vector<f32, N>,
+}
+impl<const N: usize> Default for Polygon<N> {
     fn default() -> Self {
         Self::new()
     }
 }
-impl PolygonArea {
+impl<const N: usize> Polygon<N> {
     pub fn new() -> Self {
-        PolygonArea {
+        Polygon {
             polygons: Vec::new(),
-            min: Vector2::repeat(f32::INFINITY),
-            max: Vector2::repeat(f32::NEG_INFINITY),
+            min: Vector::repeat(f32::INFINITY),
+            max: Vector::repeat(f32::NEG_INFINITY),
         }
     }
-    pub fn add_polygon(self, polygon: &[Vector2<f32>]) -> Self {
+    pub fn add_polygon(self, polygon: &[Vector<f32, N>]) -> Self {
         let min = self.min.inf(
             &polygon
                 .iter()
-                .fold(Vector2::repeat(f32::INFINITY), |x, y| y.inf(&x)),
+                .fold(Vector::repeat(f32::INFINITY), |x, y| y.inf(&x)),
         );
         let max = self.max.sup(
             &polygon
                 .iter()
-                .fold(Vector2::repeat(f32::NEG_INFINITY), |x, y| y.sup(&x)),
+                .fold(Vector::repeat(f32::NEG_INFINITY), |x, y| y.sup(&x)),
         );
         let mut polygons = self.polygons;
         polygons.push(polygon.to_vec());
-        PolygonArea { polygons, min, max }
+        Polygon { polygons, min, max }
     }
+}
+impl Polygon<2> {
     pub fn add_rect(self, half_size: Vector2<f32>, center: Vector2<f32>) -> Self {
         self.add_polygon(&[
             center - half_size,
@@ -43,7 +115,7 @@ impl PolygonArea {
         ])
     }
 }
-impl Volume<2> for PolygonArea {
+impl Volume<2> for Polygon<2> {
     fn contains(&self, point: Vector<f32, 2>) -> bool {
         if point.zip_fold(&self.min, false, |acc, a, b| acc | (a < b))
             || point.zip_fold(&self.max, false, |acc, a, b| acc | (a > b))
@@ -84,7 +156,7 @@ impl Volume<2> for PolygonArea {
         self.max
     }
 }
-impl DistanceField<2> for PolygonArea {
+impl DistanceField<2> for Polygon<2> {
     fn distance(&self, point: Vector2<f32>) -> f32 {
         let inside = self.contains(point);
         let mut dist = f32::MAX;

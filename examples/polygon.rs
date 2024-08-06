@@ -1,4 +1,4 @@
-use amida::polygon::PolygonArea;
+use amida::polygon::Polygon;
 use amida::*;
 use macroquad::prelude::*;
 use nalgebra::Vector2;
@@ -19,7 +19,7 @@ async fn main() {
             3.0,
             RED,
         );
-        let area = PolygonArea::new()
+        let area = Polygon::new()
             .add_rect(Vector2::new(100.0, 100.0), Vector2::new(200.0, 200.0))
             .add_polygon(&[
                 Vector2::new(150.0, 150.0),
