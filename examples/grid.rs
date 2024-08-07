@@ -1,9 +1,9 @@
-use amida::polygon::Polygon;
+use amida::shape::Polygon;
 use amida::*;
 use macroquad::prelude::*;
 use nalgebra::Vector2;
 
-#[macroquad::main("Polygon")]
+#[macroquad::main("Grid")]
 async fn main() {
     let mut t = 0.0;
     loop {
@@ -27,7 +27,7 @@ async fn main() {
                 Vector2::new(250.0, 200.0),
             ])
             .adjust(5.0);
-        let mut sampler = Sampler::new(area, 10.0);
+        let sampler = Sampler::new(area, 10.0);
         for cell in &sampler.grid.border_cells {
             draw_rectangle(
                 cell.x as f32 * 10.0 + 1.0,

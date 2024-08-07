@@ -3,12 +3,12 @@ use std::ops::{Index, IndexMut};
 use nalgebra::{SVector as Vector, Vector2};
 use rand::{Rng, SeedableRng};
 
-pub mod polygon;
+pub mod shape;
 pub mod utils;
 use rand_pcg::Pcg64Mcg;
 use utils::*;
 
-pub trait DistanceField<const N: usize>: Volume<N> {
+pub trait Domain<const N: usize>: Volume<N> {
     fn distance(&self, point: Vector<f32, N>) -> f32;
 
     fn adjust(self, offset: f32) -> AdjustedDistanceField<Self, N> {
@@ -17,43 +17,6 @@ pub trait DistanceField<const N: usize>: Volume<N> {
             field: self,
         }
     }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct AdjustedDistanceField<D: DistanceField<N>, const N: usize> {
-    offset: f32,
-    field: D,
-}
-impl<D: DistanceField<N>, const N: usize> DistanceField<N> for AdjustedDistanceField<D, N> {
-    fn distance(&self, point: Vector<f32, N>) -> f32 {
-        self.field.distance(point) + self.offset
-    }
-}
-impl<D: DistanceField<N>, const N: usize> Volume<N> for AdjustedDistanceField<D, N> {
-    fn contains(&self, point: Vector<f32, N>) -> bool {
-        self.distance(point) < 0.0
-    }
-    fn min_bound(&self) -> Vector<f32, N> {
-        self.field.min_bound() + Vector::repeat(self.offset)
-    }
-    fn max_bound(&self) -> Vector<f32, N> {
-        self.field.max_bound() - Vector::repeat(self.offset)
-    }
-}
-
-pub trait Volume<const N: usize>: Sized {
-    fn contains(&self, point: Vector<f32, N>) -> bool;
-    fn min_bound(&self) -> Vector<f32, N>;
-    fn max_bound(&self) -> Vector<f32, N>;
-}
-
-pub trait Domain<const N: usize>: Volume<N> {
-    fn create_grid(&self, cell_size: f32) -> Grid<N>;
-}
-impl<X, const N: usize> Domain<N> for X
-where
-    X: DistanceField<N>,
-{
     fn create_grid(&self, cell_size: f32) -> Grid<N> {
         let offset = self.min_bound().map(|x| (x / cell_size).floor() as i32);
         let size = (self.max_bound().map(|x| (x / cell_size).ceil() as i32) - offset)
@@ -85,6 +48,62 @@ where
             border_cells,
         }
     }
+
+    fn grid_points(self, settings: impl Into<GridSettings<N>>) -> Vec<Vector<f32, N>> {
+        let settings = settings.into();
+        if settings.border_adjust_radius != 0.0 {
+            let this = self.adjust(settings.border_adjust_radius);
+            let offset = settings.grid_offset.unwrap_or_else(|| this.min_bound());
+            let cell_size = settings
+                .cell_size
+                .unwrap_or_else(|| settings.grid_size.fold(0.0, |x, y| x.max(y)));
+            let sampler = Sampler::new(this, cell_size);
+            let mut points = vec![];
+            sampler.generate_grid(settings.grid_size, offset, |point| {
+                points.push(point);
+            });
+            points
+        } else {
+            let offset = settings.grid_offset.unwrap_or_else(|| self.min_bound());
+            let cell_size = settings
+                .cell_size
+                .unwrap_or_else(|| settings.grid_size.fold(0.0, |x, y| x.max(y)));
+            let sampler = Sampler::new(self, cell_size);
+            let mut points = vec![];
+            sampler.generate_grid(settings.grid_size, offset, |point| {
+                points.push(point);
+            });
+            points
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct AdjustedDistanceField<D: Domain<N>, const N: usize> {
+    offset: f32,
+    field: D,
+}
+impl<D: Domain<N>, const N: usize> Domain<N> for AdjustedDistanceField<D, N> {
+    fn distance(&self, point: Vector<f32, N>) -> f32 {
+        self.field.distance(point) + self.offset
+    }
+}
+impl<D: Domain<N>, const N: usize> Volume<N> for AdjustedDistanceField<D, N> {
+    fn contains(&self, point: Vector<f32, N>) -> bool {
+        self.distance(point) <= 0.0
+    }
+    fn min_bound(&self) -> Vector<f32, N> {
+        self.field.min_bound() + Vector::repeat(self.offset)
+    }
+    fn max_bound(&self) -> Vector<f32, N> {
+        self.field.max_bound() - Vector::repeat(self.offset)
+    }
+}
+
+pub trait Volume<const N: usize>: Sized {
+    fn contains(&self, point: Vector<f32, N>) -> bool;
+    fn min_bound(&self) -> Vector<f32, N>;
+    fn max_bound(&self) -> Vector<f32, N>;
 }
 
 pub struct Array<T, const N: usize> {
@@ -180,8 +199,9 @@ impl<D: Domain<N>, const N: usize, R: Rng> Sampler<D, N, R> {
             }
         }
     }
+    // TODO: Move out since it doesn't require a RNG?
     pub fn generate_grid(
-        &mut self,
+        &self,
         size: Vector<f32, N>,
         offset: Vector<f32, N>,
         mut f: impl FnMut(Vector<f32, N>),
@@ -250,4 +270,44 @@ pub enum Cell {
     Inside,
     Outside,
     Border,
+}
+
+impl From<f32> for ParticleSettings {
+    fn from(min_radius: f32) -> Self {
+        Self {
+            min_radius,
+            exclude_border: false,
+        }
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub struct ParticleSettings {
+    pub min_radius: f32,
+    pub exclude_border: bool,
+}
+pub struct GridSettings<const N: usize> {
+    pub border_adjust_radius: f32,
+    pub grid_size: Vector<f32, N>,
+    pub cell_size: Option<f32>,
+    // If None, uses grid_size / 2 + min_bound of shape.
+    pub grid_offset: Option<Vector<f32, N>>,
+}
+
+impl<X, const N: usize> From<X> for GridSettings<N>
+where
+    ParticleSettings: From<X>,
+{
+    fn from(x: X) -> Self {
+        let settings = ParticleSettings::from(x);
+        Self {
+            border_adjust_radius: if settings.exclude_border {
+                0.0
+            } else {
+                settings.min_radius - 0.00001
+            },
+            grid_size: Vector::repeat(settings.min_radius * 2.0),
+            cell_size: None,
+            grid_offset: None,
+        }
+    }
 }

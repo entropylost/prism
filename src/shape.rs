@@ -22,7 +22,7 @@ impl<const N: usize> Volume<N> for Cuboid<N> {
         self.max
     }
 }
-impl<const N: usize> DistanceField<N> for Cuboid<N> {
+impl<const N: usize> Domain<N> for Cuboid<N> {
     fn distance(&self, point: Vector<f32, N>) -> f32 {
         let inside = self.contains(point);
         let nearest = point.zip_zip_map(&self.min, &self.max, |x, a, b| x.clamp(a, b));
@@ -62,7 +62,7 @@ impl<const N: usize> Volume<N> for Ball<N> {
         self.center + Vector::repeat(self.radius)
     }
 }
-impl<const N: usize> DistanceField<N> for Ball<N> {
+impl<const N: usize> Domain<N> for Ball<N> {
     fn distance(&self, point: Vector<f32, N>) -> f32 {
         let dist = (point - self.center).norm();
         dist - self.radius
@@ -156,7 +156,7 @@ impl Volume<2> for Polygon<2> {
         self.max
     }
 }
-impl DistanceField<2> for Polygon<2> {
+impl Domain<2> for Polygon<2> {
     fn distance(&self, point: Vector2<f32>) -> f32 {
         let inside = self.contains(point);
         let mut dist = f32::MAX;
