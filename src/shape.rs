@@ -10,19 +10,7 @@ impl<const N: usize> Cuboid<N> {
         Cuboid { min, max }
     }
 }
-impl<const N: usize> Volume<N> for Cuboid<N> {
-    fn contains(&self, point: Vector<f32, N>) -> bool {
-        point.zip_fold(&self.min, true, |acc, a, b| acc && (a >= b))
-            && point.zip_fold(&self.max, true, |acc, a, b| acc && (a <= b))
-    }
-    fn min_bound(&self) -> Vector<f32, N> {
-        self.min
-    }
-    fn max_bound(&self) -> Vector<f32, N> {
-        self.max
-    }
-}
-impl<const N: usize> Domain<N> for Cuboid<N> {
+impl<const N: usize> VolumeCore<N> for Cuboid<N> {
     fn distance(&self, point: Vector<f32, N>) -> f32 {
         let inside = self.contains(point);
         let nearest = point.zip_zip_map(&self.min, &self.max, |x, a, b| x.clamp(a, b));
@@ -39,6 +27,39 @@ impl<const N: usize> Domain<N> for Cuboid<N> {
         }
         -dist
     }
+    fn gradient(&self, point: Vector<f32, N>) -> Vector<f32, N> {
+        let inside = self.contains(point);
+        let nearest = point.zip_zip_map(&self.min, &self.max, |x, a, b| x.clamp(a, b));
+        if !inside {
+            return (point - nearest).normalize();
+        }
+        let mut dist = f32::MAX;
+        let mut actual_nearest = Vector::repeat(0.0);
+        for i in 0..N {
+            let mut nearest = nearest;
+            nearest[i] = self.min[i];
+            if (point - nearest).norm() < dist {
+                dist = (point - nearest).norm();
+                actual_nearest = nearest;
+            }
+            nearest[i] = self.max[i];
+            if (point - nearest).norm() < dist {
+                dist = (point - nearest).norm();
+                actual_nearest = nearest;
+            }
+        }
+        -(point - actual_nearest).normalize()
+    }
+    fn contains(&self, point: Vector<f32, N>) -> bool {
+        point.zip_fold(&self.min, true, |acc, a, b| acc && (a >= b))
+            && point.zip_fold(&self.max, true, |acc, a, b| acc && (a <= b))
+    }
+    fn min_bound(&self) -> Vector<f32, N> {
+        self.min
+    }
+    fn max_bound(&self) -> Vector<f32, N> {
+        self.max
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -51,7 +72,20 @@ impl<const N: usize> Ball<N> {
         Ball { center, radius }
     }
 }
-impl<const N: usize> Volume<N> for Ball<N> {
+impl<const N: usize> VolumeCore<N> for Ball<N> {
+    fn distance(&self, point: Vector<f32, N>) -> f32 {
+        let dist = (point - self.center).norm();
+        dist - self.radius
+    }
+    fn gradient(&self, point: Vector<f32, N>) -> Vector<f32, N> {
+        let offset = point - self.center;
+        let dist = offset.norm();
+        if dist < 0.00001 * self.radius {
+            Vector::repeat(0.0)
+        } else {
+            offset / dist
+        }
+    }
     fn contains(&self, point: Vector<f32, N>) -> bool {
         (point - self.center).norm_squared() <= self.radius * self.radius
     }
@@ -60,12 +94,6 @@ impl<const N: usize> Volume<N> for Ball<N> {
     }
     fn max_bound(&self) -> Vector<f32, N> {
         self.center + Vector::repeat(self.radius)
-    }
-}
-impl<const N: usize> Domain<N> for Ball<N> {
-    fn distance(&self, point: Vector<f32, N>) -> f32 {
-        let dist = (point - self.center).norm();
-        dist - self.radius
     }
 }
 
@@ -115,7 +143,47 @@ impl Polygon<2> {
         ])
     }
 }
-impl Volume<2> for Polygon<2> {
+impl VolumeCore<2> for Polygon<2> {
+    fn distance(&self, point: Vector2<f32>) -> f32 {
+        let inside = self.contains(point);
+        let mut dist = f32::MAX;
+        for polygon in &self.polygons {
+            let mut b = polygon.last().unwrap();
+            for a in polygon {
+                dist = dist.min(distance_to_line(*a, *b, point));
+                b = a;
+            }
+        }
+
+        if inside {
+            -dist
+        } else {
+            dist
+        }
+    }
+    fn gradient(&self, point: Vector<f32, 2>) -> Vector<f32, 2> {
+        let inside = self.contains(point);
+        let mut dist = f32::MAX;
+        let mut closest_point = Vector2::repeat(0.0);
+        for polygon in &self.polygons {
+            let mut b = polygon.last().unwrap();
+            for a in polygon {
+                let proj = project_line(*a, *b, point);
+                if (proj - point).norm() <= dist {
+                    dist = (proj - point).norm();
+                    closest_point = proj;
+                }
+                b = a;
+            }
+        }
+        let gradient = (point - closest_point).normalize();
+
+        if inside {
+            -gradient
+        } else {
+            gradient
+        }
+    }
     fn contains(&self, point: Vector<f32, 2>) -> bool {
         if point.zip_fold(&self.min, false, |acc, a, b| acc | (a < b))
             || point.zip_fold(&self.max, false, |acc, a, b| acc | (a > b))
@@ -154,24 +222,5 @@ impl Volume<2> for Polygon<2> {
     }
     fn max_bound(&self) -> Vector<f32, 2> {
         self.max
-    }
-}
-impl Domain<2> for Polygon<2> {
-    fn distance(&self, point: Vector2<f32>) -> f32 {
-        let inside = self.contains(point);
-        let mut dist = f32::MAX;
-        for polygon in &self.polygons {
-            let mut b = polygon.last().unwrap();
-            for a in polygon {
-                dist = dist.min(distance_to_line(*a, *b, point));
-                b = a;
-            }
-        }
-
-        if inside {
-            -dist
-        } else {
-            dist
-        }
     }
 }

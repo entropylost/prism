@@ -1,5 +1,5 @@
 [package]
-name = "amida"
+name = "prism"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,6 +7,7 @@ edition = "2021"
 nalgebra = "0.33.0"
 rand = "0.8.5"
 rand_pcg = "0.3.1"
+smallvec = "1.13.2"
 
 [dev-dependencies]
 macroquad = "0.4.11"

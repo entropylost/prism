@@ -1,14 +1,15 @@
-use amida::shape::Polygon;
-use amida::*;
 use macroquad::prelude::*;
 use nalgebra::Vector2;
+use prism::shape::Polygon;
+use prism::Volume;
 
 #[macroquad::main("Simple")]
 async fn main() {
-    let mut t = 0.0;
+    let mut t: f32 = 0.0;
     loop {
         t += 0.01;
         t %= 10.0;
+        let size = 5.0 + 3.0 * t.sin();
         clear_background(BLACK);
 
         draw_rectangle_lines(100.0, 100.0, 200.0, 200.0, 3.0, RED);
@@ -26,8 +27,8 @@ async fn main() {
                 Vector2::new(150.0, 250.0),
                 Vector2::new(250.0, 200.0),
             ]);
-        for v in area.grid_points(5.0) {
-            draw_circle(v.x, v.y, 5.0, Color::from_rgba(255, 255, 255, 255));
+        for v in area.grid_points(size) {
+            draw_circle(v.x, v.y, size, Color::from_rgba(255, 255, 255, 255));
         }
         next_frame().await;
     }

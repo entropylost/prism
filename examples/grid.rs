@@ -1,7 +1,8 @@
-use amida::shape::Polygon;
-use amida::*;
 use macroquad::prelude::*;
 use nalgebra::Vector2;
+use prism::base::Sampler;
+use prism::shape::Polygon;
+use prism::Volume;
 
 #[macroquad::main("Grid")]
 async fn main() {
@@ -26,9 +27,9 @@ async fn main() {
                 Vector2::new(150.0, 250.0),
                 Vector2::new(250.0, 200.0),
             ])
-            .adjust(5.0);
+            .pad(5.0);
         let sampler = Sampler::new(area, 10.0);
-        for cell in &sampler.grid.border_cells {
+        for cell in &sampler.volume.border_cells {
             draw_rectangle(
                 cell.x as f32 * 10.0 + 1.0,
                 cell.y as f32 * 10.0 + 1.0,
@@ -37,7 +38,7 @@ async fn main() {
                 BLUE,
             );
         }
-        for cell in &sampler.grid.inside_cells {
+        for cell in &sampler.volume.inside_cells {
             draw_rectangle(
                 cell.x as f32 * 10.0 + 1.0,
                 cell.y as f32 * 10.0 + 1.0,

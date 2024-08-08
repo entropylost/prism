@@ -21,16 +21,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "amida"
-version = "0.1.0"
-dependencies = [
- "macroquad",
- "nalgebra",
- "rand",
- "rand_pcg",
-]
-
-[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -352,6 +342,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism"
+version = "0.1.0"
+dependencies = [
+ "macroquad",
+ "nalgebra",
+ "rand",
+ "rand_pcg",
+ "smallvec",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -456,6 +457,12 @@ checksum = "dbff4acf519f630b3a3ddcfaea6c06b42174d9a44bc70c620e9ed1649d58b82a"
 dependencies = [
  "version_check",
 ]
+
+[[package]]
+name = "smallvec"
+version = "1.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "syn"
