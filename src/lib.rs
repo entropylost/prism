@@ -14,6 +14,6 @@ pub mod shape;
 pub mod solver;
 pub mod utils;
 use base::*;
-pub use ext::Volume;
+pub use ext::{GridSettings, PackedSettings, ParticleSettings, Volume};
 use solver::*;
 use utils::*;

@@ -46,6 +46,7 @@ impl<V: VolumeCore<N>, const N: usize> Solver<V, N> {
     pub fn step_collisions(&mut self, delta_factor: f32) {
         self.update_grid();
         let mut max_penetration: f32 = 0.0;
+        // TODO: Add rayon
         let deltas = self
             .points
             .iter()

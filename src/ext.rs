@@ -57,11 +57,19 @@ pub struct ParticleSettings {
     pub radius: f32,
     pub pad_border: bool,
 }
+impl Default for ParticleSettings {
+    fn default() -> Self {
+        Self {
+            radius: 1.0,
+            pad_border: true,
+        }
+    }
+}
 impl From<f32> for ParticleSettings {
     fn from(radius: f32) -> Self {
         Self {
             radius,
-            pad_border: true,
+            ..Default::default()
         }
     }
 }
@@ -100,6 +108,16 @@ pub struct PackedSettings {
     pub cutoff: f32,
     pub density: f32,
 }
+impl Default for PackedSettings {
+    fn default() -> Self {
+        Self {
+            particle_settings: Default::default(),
+            max_iters: 500,
+            cutoff: 0.1,
+            density: 0.0,
+        }
+    }
+}
 impl<X> From<X> for PackedSettings
 where
     ParticleSettings: From<X>,
@@ -108,9 +126,7 @@ where
         let settings = x.into();
         Self {
             particle_settings: settings,
-            max_iters: 1000,
-            cutoff: 0.1,
-            density: 0.0,
+            ..Default::default()
         }
     }
 }
@@ -171,7 +187,7 @@ fn grid_points_impl<const N: usize>(
 pub fn default_packed_density<const N: usize>() -> f32 {
     match N {
         1 => 1.0,
-        2 => 1.2,
+        2 => 1.0, // Max 1.2
         3 => 1.5,
         _ => 1.0,
     }

@@ -1,13 +1,39 @@
+use std::ops::{Add, Sub};
+
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Cuboid<const N: usize> {
     min: Vector<f32, N>,
     max: Vector<f32, N>,
 }
 impl<const N: usize> Cuboid<N> {
-    pub fn new(min: Vector<f32, N>, max: Vector<f32, N>) -> Self {
+    pub fn from_bounds(min: Vector<f32, N>, max: Vector<f32, N>) -> Self {
         Cuboid { min, max }
+    }
+    pub fn new(half_size: Vector<f32, N>) -> Self {
+        Cuboid {
+            min: -half_size,
+            max: half_size,
+        }
+    }
+    pub fn offset(self, offset: Vector<f32, N>) -> Self {
+        Cuboid {
+            min: self.min + offset,
+            max: self.max + offset,
+        }
+    }
+}
+impl<const N: usize> Add<Vector<f32, N>> for Cuboid<N> {
+    type Output = Self;
+    fn add(self, rhs: Vector<f32, N>) -> Self::Output {
+        self.offset(rhs)
+    }
+}
+impl<const N: usize> Sub<Vector<f32, N>> for Cuboid<N> {
+    type Output = Self;
+    fn sub(self, rhs: Vector<f32, N>) -> Self::Output {
+        self.offset(-rhs)
     }
 }
 impl<const N: usize> VolumeCore<N> for Cuboid<N> {
@@ -62,14 +88,38 @@ impl<const N: usize> VolumeCore<N> for Cuboid<N> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Ball<const N: usize> {
     center: Vector<f32, N>,
     radius: f32,
 }
 impl<const N: usize> Ball<N> {
-    pub fn new(center: Vector<f32, N>, radius: f32) -> Self {
+    pub fn new(radius: f32) -> Self {
+        Ball {
+            center: Vector::zeros(),
+            radius,
+        }
+    }
+    pub fn from_center(center: Vector<f32, N>, radius: f32) -> Self {
         Ball { center, radius }
+    }
+    pub fn offset(self, offset: Vector<f32, N>) -> Self {
+        Ball {
+            center: self.center + offset,
+            radius: self.radius,
+        }
+    }
+}
+impl<const N: usize> Add<Vector<f32, N>> for Ball<N> {
+    type Output = Self;
+    fn add(self, rhs: Vector<f32, N>) -> Self::Output {
+        self.offset(rhs)
+    }
+}
+impl<const N: usize> Sub<Vector<f32, N>> for Ball<N> {
+    type Output = Self;
+    fn sub(self, rhs: Vector<f32, N>) -> Self::Output {
+        self.offset(-rhs)
     }
 }
 impl<const N: usize> VolumeCore<N> for Ball<N> {

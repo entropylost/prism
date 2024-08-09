@@ -1,6 +1,6 @@
 use super::*;
 
-pub trait VolumeCore<const N: usize>: Sized {
+pub trait VolumeCore<const N: usize>: Sized + Sync {
     fn distance(&self, point: Vector<f32, N>) -> f32;
     // The gradient of the sdf. Should be normalized.
     // Note: This may be 0 if there isn't a single direction to move in.
