@@ -1,5 +1,7 @@
 use std::ops::{Add, Sub};
 
+use nalgebra::Vector3;
+
 use super::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -37,44 +39,29 @@ impl<const N: usize> Sub<Vector<f32, N>> for Cuboid<N> {
     }
 }
 impl<const N: usize> VolumeCore<N> for Cuboid<N> {
-    fn distance(&self, point: Vector<f32, N>) -> f32 {
+    fn nearest_surface_point(&self, point: Vector<f32, N>) -> (Vector<f32, N>, bool) {
         let inside = self.contains(point);
-        let nearest = point.zip_zip_map(&self.min, &self.max, |x, a, b| x.clamp(a, b));
+        let inner_nearest = point.zip_zip_map(&self.min, &self.max, |x, a, b| x.clamp(a, b));
         if !inside {
-            return (point - nearest).norm();
+            return (inner_nearest, inside);
         }
         let mut dist = f32::MAX;
+        let mut nearest = Vector::repeat(0.0);
         for i in 0..N {
-            let mut nearest = nearest;
-            nearest[i] = self.min[i];
-            dist = dist.min((point - nearest).norm());
-            nearest[i] = self.max[i];
-            dist = dist.min((point - nearest).norm());
-        }
-        -dist
-    }
-    fn gradient(&self, point: Vector<f32, N>) -> Vector<f32, N> {
-        let inside = self.contains(point);
-        let nearest = point.zip_zip_map(&self.min, &self.max, |x, a, b| x.clamp(a, b));
-        if !inside {
-            return (point - nearest).normalize();
-        }
-        let mut dist = f32::MAX;
-        let mut actual_nearest = Vector::repeat(0.0);
-        for i in 0..N {
-            let mut nearest = nearest;
-            nearest[i] = self.min[i];
-            if (point - nearest).norm() < dist {
-                dist = (point - nearest).norm();
-                actual_nearest = nearest;
+            let mut side_nearest = inner_nearest;
+            side_nearest[i] = self.min[i];
+            if (point - side_nearest).norm() < dist {
+                dist = (point - side_nearest).norm();
+                nearest = side_nearest;
             }
-            nearest[i] = self.max[i];
-            if (point - nearest).norm() < dist {
-                dist = (point - nearest).norm();
-                actual_nearest = nearest;
+            side_nearest[i] = self.max[i];
+            if (point - side_nearest).norm() < dist {
+                dist = (point - side_nearest).norm();
+                nearest = side_nearest;
             }
         }
-        -(point - actual_nearest).normalize()
+
+        (nearest, inside)
     }
     fn contains(&self, point: Vector<f32, N>) -> bool {
         point.zip_fold(&self.min, true, |acc, a, b| acc && (a >= b))
@@ -123,18 +110,17 @@ impl<const N: usize> Sub<Vector<f32, N>> for Ball<N> {
     }
 }
 impl<const N: usize> VolumeCore<N> for Ball<N> {
-    fn distance(&self, point: Vector<f32, N>) -> f32 {
-        let dist = (point - self.center).norm();
-        dist - self.radius
-    }
-    fn gradient(&self, point: Vector<f32, N>) -> Vector<f32, N> {
-        let offset = point - self.center;
-        let dist = offset.norm();
-        if dist < 0.00001 * self.radius {
-            Vector::repeat(0.0)
+    fn nearest_surface_point(&self, point: Vector<f32, N>) -> (Vector<f32, N>, bool) {
+        let delta = point - self.center;
+        let norm = delta.norm();
+        let dir = if norm <= 1e-6 {
+            let mut v = Vector::repeat(0.0);
+            v[0] = 1.0;
+            v
         } else {
-            offset / dist
-        }
+            delta / norm
+        };
+        (self.center + dir * self.radius, norm <= self.radius)
     }
     fn contains(&self, point: Vector<f32, N>) -> bool {
         (point - self.center).norm_squared() <= self.radius * self.radius
@@ -194,45 +180,22 @@ impl Polygon<2> {
     }
 }
 impl VolumeCore<2> for Polygon<2> {
-    fn distance(&self, point: Vector2<f32>) -> f32 {
-        let inside = self.contains(point);
+    fn nearest_surface_point(&self, point: Vector<f32, 2>) -> (Vector<f32, 2>, bool) {
         let mut dist = f32::MAX;
-        for polygon in &self.polygons {
-            let mut b = polygon.last().unwrap();
-            for a in polygon {
-                dist = dist.min(distance_to_line(*a, *b, point));
-                b = a;
-            }
-        }
+        let mut nearest_point = Vector2::repeat(0.0);
 
-        if inside {
-            -dist
-        } else {
-            dist
-        }
-    }
-    fn gradient(&self, point: Vector<f32, 2>) -> Vector<f32, 2> {
-        let inside = self.contains(point);
-        let mut dist = f32::MAX;
-        let mut closest_point = Vector2::repeat(0.0);
         for polygon in &self.polygons {
             let mut b = polygon.last().unwrap();
             for a in polygon {
                 let proj = project_line(*a, *b, point);
                 if (proj - point).norm() <= dist {
                     dist = (proj - point).norm();
-                    closest_point = proj;
+                    nearest_point = proj;
                 }
                 b = a;
             }
         }
-        let gradient = (point - closest_point).normalize();
-
-        if inside {
-            -gradient
-        } else {
-            gradient
-        }
+        (nearest_point, self.contains(point))
     }
     fn contains(&self, point: Vector<f32, 2>) -> bool {
         if point.zip_fold(&self.min, false, |acc, a, b| acc | (a < b))
@@ -272,5 +235,58 @@ impl VolumeCore<2> for Polygon<2> {
     }
     fn max_bound(&self) -> Vector<f32, 2> {
         self.max
+    }
+}
+
+// This isn't generic due to lack of generic_const_exprs.
+#[derive(Debug, Clone, Copy)]
+pub struct Extrude3<V: VolumeCore<2>> {
+    pub base: V,
+    // TODO: Use a Range when new_range_api is stable.
+    pub interval: (f32, f32),
+}
+
+impl<V: VolumeCore<2>> VolumeCore<3> for Extrude3<V> {
+    fn nearest_surface_point(&self, point: Vector<f32, 3>) -> (Vector<f32, 3>, bool) {
+        let (base_nearest, base_inside) = self
+            .base
+            .nearest_surface_point(point.fixed_view::<2, 1>(0, 0).into_owned());
+        let interval_inside = point.z >= self.interval.0 && point.z <= self.interval.1;
+        let closest_interval =
+            if (point.z - self.interval.0).abs() < (point.z - self.interval.1).abs() {
+                self.interval.0
+            } else {
+                self.interval.1
+            };
+        let inside = base_inside && interval_inside;
+        let surface = if inside {
+            let base_candidate = base_nearest.push(point.z);
+            let interval_candidate = Vector3::new(point.x, point.y, closest_interval);
+            if (base_candidate - point).norm() < (interval_candidate - point).norm() {
+                base_candidate
+            } else {
+                interval_candidate
+            }
+        } else if base_inside {
+            Vector3::new(point.x, point.y, closest_interval)
+        } else if interval_inside {
+            base_nearest.push(point.z)
+        } else {
+            base_nearest.push(closest_interval)
+        };
+        (surface, inside)
+    }
+    fn contains(&self, point: Vector<f32, 3>) -> bool {
+        point.z >= self.interval.0
+            && point.z <= self.interval.1
+            && self
+                .base
+                .contains(point.fixed_view::<2, 1>(0, 0).into_owned())
+    }
+    fn min_bound(&self) -> Vector<f32, 3> {
+        self.base.min_bound().push(self.interval.0)
+    }
+    fn max_bound(&self) -> Vector<f32, 3> {
+        self.base.max_bound().push(self.interval.1)
     }
 }

@@ -1,12 +1,43 @@
 use super::*;
 
+// TODO: How to deal with repeating volumes?
 pub trait VolumeCore<const N: usize>: Sized + Sync {
-    fn distance(&self, point: Vector<f32, N>) -> f32;
-    // The gradient of the sdf. Should be normalized.
-    // Note: This may be 0 if there isn't a single direction to move in.
-    fn gradient(&self, point: Vector<f32, N>) -> Vector<f32, N>;
+    /// Should return the nearest point on the surface as well as whether the point is inside the shape.
+    /// Either this or both `distance` and `gradient` should be implemented.
+    fn nearest_surface_point(&self, point: Vector<f32, N>) -> (Vector<f32, N>, bool) {
+        let dist = self.distance(point);
+        let grad = self.gradient(point);
+        (point - grad * dist, dist <= 0.0)
+    }
 
-    fn contains(&self, point: Vector<f32, N>) -> bool;
+    /// The value of a signed distance field to the surface. This should be positive outside the shape and negative inside.
+    /// In some cases, it may be impossible to compute the actual distance, in which case the magnitude of the return value
+    /// should be less than the actual distance.
+    fn distance(&self, point: Vector<f32, N>) -> f32 {
+        let (surface, inside) = self.nearest_surface_point(point);
+        let dist = (point - surface).norm();
+        if inside {
+            -dist
+        } else {
+            dist
+        }
+    }
+    /// The gradient of the [`distance`] function. Should be normalized.
+    /// This may be 0 if multiple surface points are equidistant.
+    fn gradient(&self, point: Vector<f32, N>) -> Vector<f32, N> {
+        let (surface, inside) = self.nearest_surface_point(point);
+        let grad = (point - surface).normalize();
+        if inside {
+            -grad
+        } else {
+            grad
+        }
+    }
+
+    /// Whether the point is inside the shape.
+    fn contains(&self, point: Vector<f32, N>) -> bool {
+        self.nearest_surface_point(point).1
+    }
     fn min_bound(&self) -> Vector<f32, N>;
     fn max_bound(&self) -> Vector<f32, N>;
 

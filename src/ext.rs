@@ -1,3 +1,5 @@
+use shape::Extrude3;
+
 use super::*;
 
 pub trait Volume<const N: usize>: VolumeCore<N> {
@@ -188,7 +190,7 @@ pub fn default_packed_density<const N: usize>() -> f32 {
     match N {
         1 => 1.0,
         2 => 1.0, // Max 1.2
-        3 => 1.5,
+        3 => 1.2, // 1.3 to 1.4 sometimes works.
         _ => 1.0,
     }
 }
@@ -218,3 +220,13 @@ fn packed_points_impl<const N: usize>(
         max_penetration: solver.max_penetration,
     }
 }
+
+pub trait Volume2d: VolumeCore<2> {
+    fn extrude(self, start: f32, end: f32) -> Extrude3<Self> {
+        Extrude3 {
+            interval: (start, end),
+            base: self,
+        }
+    }
+}
+impl<X> Volume2d for X where X: VolumeCore<2> {}
