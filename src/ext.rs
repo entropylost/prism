@@ -167,6 +167,13 @@ impl<const N: usize> Deref for PackedPoints<N> {
         &self.points
     }
 }
+impl<const N: usize> IntoIterator for PackedPoints<N> {
+    type Item = Vector<f32, N>;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.points.into_iter()
+    }
+}
 
 fn grid_points_impl<const N: usize>(
     domain: impl VolumeCore<N>,
